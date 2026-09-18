@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { ConfirmPaymentBox } from '../components/ConfirmPaymentBox'
 import { isTxHash, lookupCoinByTicker, shortAddr } from '../lib/decimalApi'
+import { CONFIRM_AMOUNT_DEL, CONFIRM_WALLET } from '../lib/confirm'
 import { useStore } from '../lib/store'
 import type { TokenProject } from '../data/mock'
 
@@ -461,24 +463,27 @@ export function CreatePage() {
 
           {step === 3 && (
             <div className="form-grid">
+              <ConfirmPaymentBox />
+
               <div className="note">
-                Каждый участник отправляет небольшую подтверждающую транзакцию из своего
-                кошелька и вставляет сюда её номер (hash). Без этого регистрация не
-                завершится.
+                1) Скопируйте адрес системы выше → 2) из своего кошелька отправьте{' '}
+                <strong>{CONFIRM_AMOUNT_DEL} DEL</strong> → 3) вставьте hash транзакции в
+                своё поле ниже. Получатель всегда один: {CONFIRM_WALLET.slice(0, 10)}…
               </div>
 
               <div className="panel-flat">
                 <div className="inline-row" style={{ marginBottom: '0.75rem' }}>
-                  <strong>Подтверждение владельца</strong>
+                  <strong>1. Владелец подтверждает</strong>
                   {ownerConfirmed && (
                     <span style={{ color: 'var(--accent)', fontWeight: 700 }}>Готово ✓</span>
                   )}
                 </div>
                 <p className="section-sub" style={{ marginBottom: '0.75rem' }}>
-                  Кошелёк {shortAddr(ownerWallet)}
+                  С кошелька владельца {shortAddr(ownerWallet)} переведите{' '}
+                  {CONFIRM_AMOUNT_DEL} DEL на адрес системы, затем вставьте hash.
                 </p>
                 <div className="field">
-                  <label htmlFor="ownerTx">Номер транзакции владельца</label>
+                  <label htmlFor="ownerTx">Hash транзакции владельца</label>
                   <input
                     id="ownerTx"
                     value={ownerTx}
@@ -487,7 +492,7 @@ export function CreatePage() {
                       setOwnerTx(e.target.value.trim())
                       setOwnerConfirmed(false)
                     }}
-                    placeholder="Вставьте hash транзакции"
+                    placeholder="0x… hash перевода на адрес системы"
                   />
                 </div>
                 {!ownerConfirmed && (
@@ -513,7 +518,11 @@ export function CreatePage() {
               </div>
 
               <div className="panel-flat" style={{ display: 'grid', gap: '1rem' }}>
-                <strong>Подтверждения помощников</strong>
+                <strong>2. Помощники подтверждают</strong>
+                <p className="section-sub">
+                  Каждый помощник тоже шлёт {CONFIRM_AMOUNT_DEL} DEL на тот же адрес
+                  системы со своего кошелька.
+                </p>
                 {helpers.map((h, i) => (
                   <div
                     key={h.wallet + i}
@@ -535,10 +544,11 @@ export function CreatePage() {
                       )}
                     </div>
                     <p className="section-sub" style={{ marginBottom: '0.5rem' }}>
-                      {shortAddr(h.wallet)}
+                      С кошелька {shortAddr(h.wallet)} → {CONFIRM_AMOUNT_DEL} DEL на адрес
+                      системы
                     </p>
                     <div className="field">
-                      <label>Номер транзакции</label>
+                      <label>Hash транзакции</label>
                       <input
                         value={h.txHash}
                         disabled={h.confirmed}
@@ -548,7 +558,7 @@ export function CreatePage() {
                             confirmed: false,
                           })
                         }
-                        placeholder="Вставьте hash транзакции"
+                        placeholder="0x… hash перевода на адрес системы"
                       />
                     </div>
                     {!h.confirmed ? (

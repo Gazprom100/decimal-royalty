@@ -80,10 +80,10 @@ export function HomePage() {
             </div>
             <div className="panel-flat">
               <div className="section-kicker">Шаг 3</div>
-              <h3 style={{ marginBottom: '0.5rem' }}>Подтвердите из кошельков</h3>
+              <h3 style={{ marginBottom: '0.5rem' }}>Переведите DEL на адрес системы</h3>
               <p className="section-sub">
-                Владелец и каждый помощник отправляют подтверждающую транзакцию —
-                так система понимает, что все согласны.
+                Владелец и помощники отправляют подтверждающий перевод на один общий
+                адрес системы — он показан на шаге регистрации.
               </p>
             </div>
           </div>
