@@ -3,10 +3,9 @@ import type { ReactNode } from 'react'
 
 const links = [
   { to: '/', label: 'Главная', end: true },
-  { to: '/create', label: 'Регистрация' },
-  { to: '/cabinet', label: 'Кабинет' },
-  { to: '/admin', label: 'Админ' },
-  { to: '/token/BLOG', label: 'Пример токена' },
+  { to: '/create', label: 'Добавить токен' },
+  { to: '/cabinet', label: 'Мой кабинет' },
+  { to: '/admin', label: 'Админка' },
 ]
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -18,7 +17,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <span className="brand-mark">D</span>
             <span>Decimal Tokenization</span>
           </NavLink>
-          <nav className="nav-links" aria-label="Основная навигация">
+          <nav className="nav-links" aria-label="Меню">
             {links.map((link) => (
               <NavLink
                 key={link.to}
@@ -32,7 +31,7 @@ export function Layout({ children }: { children: ReactNode }) {
               </NavLink>
             ))}
             <NavLink to="/create" className="btn btn-primary btn-sm">
-              Регистрация
+              Добавить токен
             </NavLink>
           </nav>
         </div>
@@ -40,8 +39,8 @@ export function Layout({ children }: { children: ReactNode }) {
       <main>{children}</main>
       <footer className="site-footer">
         <div className="container footer-row">
-          <span>DecimalChain Tokenization — кликабельный прототип</span>
-          <span>Демо-данные · не financial advice</span>
+          <span>DecimalChain Tokenization</span>
+          <span>Помощь проектам · вознаграждение помощникам</span>
         </div>
       </footer>
     </>

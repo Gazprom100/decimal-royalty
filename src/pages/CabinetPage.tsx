@@ -1,54 +1,44 @@
 import { Link, useNavigate } from 'react-router-dom'
-import {
-  cabinetHistory,
-  formatCompact,
-  formatNumber,
-  myProjects,
-} from '../data/mock'
+import { formatCompact, formatNumber, cabinetHistory } from '../data/mock'
+import { shortAddr } from '../lib/decimalApi'
+import { useStore } from '../lib/store'
 
 export function CabinetPage() {
   const navigate = useNavigate()
-  const totalIncome = myProjects.reduce((sum, p) => sum + (p.myReward || 0), 0)
+  const { projects, myIncome } = useStore()
 
   return (
     <div className="page-shell">
       <div className="container">
-        <h1 className="page-title">Личный кабинет</h1>
+        <h1 className="page-title">Мой кабинет</h1>
         <p className="page-sub">
-          Ваша экономика в DecimalChain Tokenization: проекты, доли, делегирование и
-          выплаты.
+          Здесь видно, в каких проектах вы участвуете и сколько уже заработали.
         </p>
 
         <div className="grid-2" style={{ marginBottom: '1.25rem' }}>
           <div className="income-hero">
             <span className="label">Ваш доход</span>
-            <span className="value">{formatNumber(totalIncome)} DEL</span>
+            <span className="value">{formatNumber(myIncome)} DEL</span>
             <span style={{ color: 'var(--text-soft)' }}>
-              Сумма вознаграждений по всем вашим проектам
+              Сумма вознаграждений по всем проектам
             </span>
           </div>
           <div className="panel-flat" style={{ display: 'grid', gap: '0.85rem' }}>
-            <div className="inline-row">
-              <span className="live-dot" />
-              <strong>Быстрые действия</strong>
-            </div>
+            <strong>Что дальше?</strong>
             <Link to="/create" className="btn btn-primary">
-              Зарегистрировать токен
-            </Link>
-            <Link to="/token/BLOG" className="btn btn-ghost">
-              Открыть публичную страницу BLOG
+              Добавить новый токен
             </Link>
             <p className="section-sub">
-              Здесь вы видите не кнопку «создать», а результат участия в экономике
-              проектов.
+              Добавили токен — он появится в списке ниже. Нажмите на строку, чтобы
+              открыть публичную страницу.
             </p>
           </div>
         </div>
 
         <div className="section-head">
           <div>
-            <div className="section-kicker">Портфель</div>
-            <h2>Мои проекты</h2>
+            <div className="section-kicker">Ваши проекты</div>
+            <h2>Где вы получаете долю</h2>
           </div>
         </div>
 
@@ -58,33 +48,39 @@ export function CabinetPage() {
               <tr>
                 <th>Проект</th>
                 <th>Токен</th>
-                <th>Кошельки</th>
-                <th>Делегировано</th>
-                <th>Вознаграждение</th>
+                <th>Людей</th>
+                <th>Вложено в сеть</th>
+                <th>Ваш доход</th>
               </tr>
             </thead>
             <tbody>
-              {myProjects.map((p) => (
-                <tr
-                  key={p.id}
-                  className="clickable"
-                  onClick={() => navigate(`/token/${p.symbol}`)}
-                >
-                  <td>{p.name}</td>
-                  <td>
-                    <Link
-                      className="token-link"
-                      to={`/token/${p.symbol}`}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {p.symbol}
-                    </Link>
-                  </td>
-                  <td>{formatNumber(p.wallets)}</td>
-                  <td>{formatCompact(p.delegated)}</td>
-                  <td>{formatNumber(p.myReward || 0)} DEL</td>
+              {projects.length === 0 ? (
+                <tr>
+                  <td colSpan={5}>Пока нет проектов. Добавьте первый токен.</td>
                 </tr>
-              ))}
+              ) : (
+                projects.map((p) => (
+                  <tr
+                    key={p.id}
+                    className="clickable"
+                    onClick={() => navigate(`/token/${p.symbol}`)}
+                  >
+                    <td>{p.name}</td>
+                    <td>
+                      <Link
+                        className="token-link"
+                        to={`/token/${p.symbol}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {p.symbol}
+                      </Link>
+                    </td>
+                    <td>{formatNumber(p.wallets)}</td>
+                    <td>{formatCompact(p.delegated)}</td>
+                    <td>{formatNumber(p.myReward || 0)} DEL</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -93,8 +89,8 @@ export function CabinetPage() {
           <div>
             <div className="section-head">
               <div>
-                <div className="section-kicker">Активность</div>
-                <h2>История</h2>
+                <div className="section-kicker">История</div>
+                <h2>Последние операции</h2>
               </div>
             </div>
             <div className="table-wrap">
@@ -102,8 +98,8 @@ export function CabinetPage() {
                 <thead>
                   <tr>
                     <th>Дата</th>
-                    <th>Тип</th>
-                    <th>Проект</th>
+                    <th>Что произошло</th>
+                    <th>Токен</th>
                     <th>Сумма</th>
                   </tr>
                 </thead>
@@ -124,12 +120,12 @@ export function CabinetPage() {
           <div>
             <div className="section-head">
               <div>
-                <div className="section-kicker">Детали</div>
-                <h2>Мои доли</h2>
+                <div className="section-kicker">Ваши доли</div>
+                <h2>Как делится доход</h2>
               </div>
             </div>
             <div style={{ display: 'grid', gap: '0.85rem' }}>
-              {myProjects.map((p) => {
+              {projects.map((p) => {
                 const me =
                   p.participants.find((x) => x.name === 'You') || p.participants[0]
                 return (
@@ -138,10 +134,13 @@ export function CabinetPage() {
                       {p.symbol} · {me?.role}
                     </strong>
                     <p className="section-sub" style={{ marginTop: 6 }}>
-                      Доля {me?.share}% · wallet {me?.wallet.slice(0, 8)}…
+                      Ваша доля {me?.share}% · кошелёк {shortAddr(me?.wallet || '')}
                     </p>
                     <div className="split-track" style={{ marginTop: 10 }}>
-                      <div className="split-fill" style={{ width: `${me?.share || 0}%` }} />
+                      <div
+                        className="split-fill"
+                        style={{ width: `${me?.share || 0}%` }}
+                      />
                     </div>
                   </div>
                 )

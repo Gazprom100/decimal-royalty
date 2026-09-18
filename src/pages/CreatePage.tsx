@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { isTxHash, lookupCoinByTicker, shortAddr } from '../lib/decimalApi'
+import { useStore } from '../lib/store'
+import type { TokenProject } from '../data/mock'
 
 type Helper = {
   name: string
@@ -10,7 +13,7 @@ type Helper = {
   confirmed: boolean
 }
 
-type LookupStatus = 'idle' | 'loading' | 'ok' | 'too_old' | 'not_found'
+type LookupStatus = 'idle' | 'loading' | 'ok' | 'too_old' | 'not_found' | 'error'
 
 const emptyHelper = (): Helper => ({
   name: '',
@@ -21,53 +24,28 @@ const emptyHelper = (): Helper => ({
   confirmed: false,
 })
 
-/** Демо: «свежий» токен — 18 ч назад */
-const DEMO_TOKEN_AGE_HOURS = 18
 const MAX_AGE_HOURS = 72
-
-function shortHash(seed: string) {
-  let h = 0
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
-  return `0x${h.toString(16).padStart(8, '0')}…${(h ^ 0xabcdef).toString(16).slice(0, 6)}`
-}
 
 export function CreatePage() {
   const navigate = useNavigate()
+  const { registerProject } = useStore()
   const [step, setStep] = useState(1)
 
-  const [ownerWallet, setOwnerWallet] = useState(
-    '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
-  )
+  const [ownerWallet, setOwnerWallet] = useState('')
   const [lookupMode, setLookupMode] = useState<'ticker' | 'contract'>('ticker')
-  const [ticker, setTicker] = useState('BLOG')
+  const [ticker, setTicker] = useState('')
   const [contract, setContract] = useState('')
   const [lookupStatus, setLookupStatus] = useState<LookupStatus>('idle')
+  const [lookupMessage, setLookupMessage] = useState('')
   const [tokenMeta, setTokenMeta] = useState<{
     symbol: string
+    name: string
     contract: string
     createdAt: string
     ageHours: number
   } | null>(null)
 
-  const [helpers, setHelpers] = useState<Helper[]>([
-    {
-      name: 'Alex',
-      role: 'Консультант',
-      wallet: '0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2',
-      share: 60,
-      txHash: '',
-      confirmed: false,
-    },
-    {
-      name: 'Max',
-      role: 'Маркетинг',
-      wallet: '0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db',
-      share: 40,
-      txHash: '',
-      confirmed: false,
-    },
-  ])
-
+  const [helpers, setHelpers] = useState<Helper[]>([emptyHelper()])
   const [ownerTx, setOwnerTx] = useState('')
   const [ownerConfirmed, setOwnerConfirmed] = useState(false)
   const [done, setDone] = useState(false)
@@ -77,8 +55,13 @@ export function CreatePage() {
     [helpers],
   )
 
-  const allHelpersConfirmed = helpers.every((h) => h.confirmed)
-  const canFinish = ownerConfirmed && allHelpersConfirmed && helpers.length > 0
+  const allHelpersConfirmed = helpers.every((h) => h.confirmed && isTxHash(h.txHash))
+  const canFinish =
+    ownerConfirmed &&
+    isTxHash(ownerTx) &&
+    allHelpersConfirmed &&
+    helpers.length > 0 &&
+    !!tokenMeta
 
   const updateHelper = (index: number, patch: Partial<Helper>) => {
     setHelpers((prev) => prev.map((p, i) => (i === index ? { ...p, ...patch } : p)))
@@ -88,84 +71,150 @@ export function CreatePage() {
     setHelpers((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const resolveToken = () => {
+  const resolveToken = async () => {
     setLookupStatus('loading')
-    window.setTimeout(() => {
-      const symbol = lookupMode === 'ticker' ? ticker.trim().toUpperCase() : 'BLOG'
-      const query =
-        lookupMode === 'ticker' ? ticker.trim() : contract.trim()
+    setLookupMessage('')
+    setTokenMeta(null)
 
-      if (!query || !ownerWallet.trim()) {
+    if (!ownerWallet.trim()) {
+      setLookupStatus('not_found')
+      setLookupMessage('Укажите адрес кошелька владельца токена.')
+      return
+    }
+
+    if (lookupMode === 'contract') {
+      const addr = contract.trim()
+      if (addr.length < 20) {
         setLookupStatus('not_found')
-        setTokenMeta(null)
+        setLookupMessage('Введите полный адрес смарт-контракта.')
         return
       }
-
-      // Демо-логика: тикер OLD → старше 72ч; иначе свежий
-      if (symbol === 'OLD' || query.toLowerCase().includes('old')) {
-        setLookupStatus('too_old')
-        setTokenMeta({
-          symbol: symbol || 'OLD',
-          contract: '0xOLD000000000000000000000000000000000001',
-          createdAt: '10.09.2026 14:20',
-          ageHours: 196,
-        })
-        return
-      }
-
-      const resolvedContract =
-        lookupMode === 'contract' && contract.trim()
-          ? contract.trim()
-          : `0x${symbol.padEnd(40, '0').slice(0, 40)}`
-
+      const symbol = ticker.trim().toUpperCase() || 'TOKEN'
       setTokenMeta({
-        symbol: symbol || 'TOKEN',
-        contract: resolvedContract,
-        createdAt: '17.09.2026 18:40',
-        ageHours: DEMO_TOKEN_AGE_HOURS,
+        symbol,
+        name: symbol,
+        contract: addr,
+        createdAt: new Date().toLocaleString('ru-RU'),
+        ageHours: 0,
       })
       setLookupStatus('ok')
-    }, 600)
+      setLookupMessage(
+        'Контракт принят. Убедитесь, что токен выпущен не более 72 часов назад.',
+      )
+      return
+    }
+
+    const symbol = ticker.trim().toUpperCase()
+    if (!symbol) {
+      setLookupStatus('not_found')
+      setLookupMessage('Введите короткое название токена (тикер), например MYCOIN.')
+      return
+    }
+
+    const coin = await lookupCoinByTicker(symbol)
+    if (!coin) {
+      setLookupStatus('error')
+      setLookupMessage(
+        'Не удалось найти такой токен в DecimalChain. Проверьте название или укажите адрес контракта.',
+      )
+      return
+    }
+
+    if (coin.ageHours > MAX_AGE_HOURS) {
+      setLookupStatus('too_old')
+      setTokenMeta({
+        symbol: coin.symbol,
+        name: coin.title,
+        contract: coin.contract,
+        createdAt: coin.createdAt,
+        ageHours: coin.ageHours,
+      })
+      setLookupMessage(
+        `Токен слишком старый: уже ${Math.round(coin.ageHours)} часов. Можно зарегистрировать только токен младше ${MAX_AGE_HOURS} часов.`,
+      )
+      return
+    }
+
+    setTokenMeta({
+      symbol: coin.symbol,
+      name: coin.title,
+      contract: coin.contract,
+      createdAt: coin.createdAt,
+      ageHours: coin.ageHours,
+    })
+    if (coin.creator && ownerWallet && !ownerWallet.toLowerCase().includes(coin.creator.slice(0, 8).toLowerCase())) {
+      setLookupMessage(
+        'Токен найден. Проверьте, что адрес владельца совпадает с создателем токена в сети.',
+      )
+    } else {
+      setLookupMessage('Токен найден и подходит по сроку.')
+    }
+    setLookupStatus('ok')
   }
 
   const confirmOwner = () => {
-    const hash = ownerTx.trim() || shortHash(`owner-${ownerWallet}-${Date.now()}`)
-    setOwnerTx(hash)
+    if (!isTxHash(ownerTx)) {
+      setLookupMessage('Вставьте номер подтверждающей транзакции владельца.')
+      return
+    }
     setOwnerConfirmed(true)
   }
 
   const confirmHelper = (index: number) => {
     const h = helpers[index]
-    const hash = h.txHash.trim() || shortHash(`helper-${h.wallet}-${Date.now()}`)
-    updateHelper(index, { txHash: hash, confirmed: true })
+    if (!isTxHash(h.txHash)) return
+    updateHelper(index, { confirmed: true })
   }
 
   const finish = () => {
+    if (!tokenMeta || !canFinish) return
+
+    const project: TokenProject = {
+      id: tokenMeta.symbol.toLowerCase(),
+      symbol: tokenMeta.symbol,
+      name: tokenMeta.name || tokenMeta.symbol,
+      description: `Токен ${tokenMeta.symbol}`,
+      ownerWallet: ownerWallet.trim(),
+      contract: tokenMeta.contract,
+      wallets: 0,
+      delegated: 0,
+      unbonding: 0,
+      activeDelegated: 0,
+      paidDel: 0,
+      myReward: 0,
+      participants: helpers.map((h) => ({
+        name: h.name || 'Помощник',
+        role: h.role,
+        wallet: h.wallet.trim(),
+        share: h.share,
+      })),
+    }
+
+    registerProject(project)
     setDone(true)
-    window.setTimeout(() => navigate('/cabinet'), 1400)
+    window.setTimeout(() => navigate(`/token/${project.symbol}`), 900)
   }
 
   return (
     <div className="page-shell">
       <div className="container" style={{ maxWidth: 900 }}>
-        <h1 className="page-title">Регистрация токена в системе</h1>
+        <h1 className="page-title">Добавить токен</h1>
         <p className="page-sub">
-          Владелец токена подтверждает адрес и факт выпуска. Бюджет вознаграждения —
-          только для помощников; владелец о нём может не знать.
+          Заполните три коротких шага. Владелец только подтверждает токен — доход
+          получают помощники.
         </p>
 
         {done && (
           <div className="success-banner">
-            {tokenMeta?.symbol || ticker} зарегистрирован. Все подтверждения получены.
-            Переходим в кабинет…
+            Токен {tokenMeta?.symbol} добавлен. Открываем его страницу…
           </div>
         )}
 
         <div className="steps">
           {[
-            [1, 'Владелец и токен'],
-            [2, 'Помощники'],
-            [3, 'Транзакции'],
+            [1, '1. Токен'],
+            [2, '2. Помощники'],
+            [3, '3. Подтверждения'],
           ].map(([n, label]) => (
             <span
               key={n}
@@ -180,19 +229,17 @@ export function CreatePage() {
           {step === 1 && (
             <div className="form-grid">
               <div className="note">
-                Нужны только <strong>адрес владельца</strong> и токен:{' '}
-                <strong>тикер</strong> (поиск автоматически) или{' '}
-                <strong>адрес смарт-контракта</strong>. Токен должен быть создан не
-                более <strong>{MAX_AGE_HOURS} часов</strong> до регистрации.
+                Нужны адрес владельца и название токена. Токен должен быть новым — не
+                старше <strong>{MAX_AGE_HOURS} часов</strong>.
               </div>
 
               <div className="field">
-                <label htmlFor="owner">Адрес владельца (создателя токена)</label>
+                <label htmlFor="owner">Кошелёк владельца токена</label>
                 <input
                   id="owner"
                   value={ownerWallet}
-                  onChange={(e) => setOwnerWallet(e.target.value)}
-                  placeholder="0x…"
+                  onChange={(e) => setOwnerWallet(e.target.value.trim())}
+                  placeholder="Адрес кошелька, например 0x… или dx1…"
                 />
               </div>
 
@@ -202,20 +249,20 @@ export function CreatePage() {
                   className={`tab${lookupMode === 'ticker' ? ' active' : ''}`}
                   onClick={() => setLookupMode('ticker')}
                 >
-                  По тикеру
+                  По названию
                 </button>
                 <button
                   type="button"
                   className={`tab${lookupMode === 'contract' ? ' active' : ''}`}
                   onClick={() => setLookupMode('contract')}
                 >
-                  По смарт-контракту
+                  По адресу контракта
                 </button>
               </div>
 
               {lookupMode === 'ticker' ? (
                 <div className="field">
-                  <label htmlFor="ticker">Тикер</label>
+                  <label htmlFor="ticker">Название токена (тикер)</label>
                   <input
                     id="ticker"
                     value={ticker}
@@ -223,37 +270,62 @@ export function CreatePage() {
                       setTicker(e.target.value.toUpperCase().slice(0, 12))
                       setLookupStatus('idle')
                     }}
-                    placeholder="BLOG"
+                    placeholder="Например MYCOIN"
                   />
                 </div>
               ) : (
-                <div className="field">
-                  <label htmlFor="contract">Адрес смарт-контракта</label>
-                  <input
-                    id="contract"
-                    value={contract}
-                    onChange={(e) => {
-                      setContract(e.target.value)
-                      setLookupStatus('idle')
-                    }}
-                    placeholder="0x…"
-                  />
-                </div>
+                <>
+                  <div className="field">
+                    <label htmlFor="contract">Адрес смарт-контракта</label>
+                    <input
+                      id="contract"
+                      value={contract}
+                      onChange={(e) => {
+                        setContract(e.target.value.trim())
+                        setLookupStatus('idle')
+                      }}
+                      placeholder="0x…"
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="ticker2">Как назвать токен в системе</label>
+                    <input
+                      id="ticker2"
+                      value={ticker}
+                      onChange={(e) => setTicker(e.target.value.toUpperCase().slice(0, 12))}
+                      placeholder="Короткое имя"
+                    />
+                  </div>
+                </>
               )}
 
               <button
                 type="button"
                 className="btn btn-ghost"
-                onClick={resolveToken}
+                onClick={() => void resolveToken()}
                 disabled={lookupStatus === 'loading'}
               >
-                {lookupStatus === 'loading' ? 'Ищем токен…' : 'Найти токен в DecimalChain'}
+                {lookupStatus === 'loading' ? 'Ищем…' : 'Проверить токен'}
               </button>
 
-              {lookupStatus === 'ok' && tokenMeta && (
+              {lookupMessage && (
+                <div
+                  className="note"
+                  style={{
+                    borderColor:
+                      lookupStatus === 'ok'
+                        ? 'rgba(46,230,166,0.35)'
+                        : 'rgba(255,107,107,0.4)',
+                  }}
+                >
+                  {lookupMessage}
+                </div>
+              )}
+
+              {tokenMeta && (lookupStatus === 'ok' || lookupStatus === 'too_old') && (
                 <div className="stats-grid">
                   <div className="stat">
-                    <div className="stat-label">Тикер</div>
+                    <div className="stat-label">Токен</div>
                     <div className="stat-value">{tokenMeta.symbol}</div>
                   </div>
                   <div className="stat">
@@ -270,29 +342,12 @@ export function CreatePage() {
                   </div>
                   <div className="stat">
                     <div className="stat-label">Контракт</div>
-                    <div className="stat-value" style={{ fontSize: '0.85rem' }}>
-                      {tokenMeta.contract.slice(0, 10)}…{tokenMeta.contract.slice(-6)}
+                    <div className="stat-value" style={{ fontSize: '0.95rem' }}>
+                      {shortAddr(tokenMeta.contract)}
                     </div>
                   </div>
                 </div>
               )}
-
-              {lookupStatus === 'too_old' && tokenMeta && (
-                <div className="note" style={{ borderColor: 'rgba(255,107,107,0.4)' }}>
-                  Токен {tokenMeta.symbol} создан {tokenMeta.ageHours} ч назад — больше
-                  лимита {MAX_AGE_HOURS} ч. Регистрация недоступна.
-                </div>
-              )}
-
-              {lookupStatus === 'not_found' && (
-                <div className="note" style={{ borderColor: 'rgba(255,107,107,0.4)' }}>
-                  Укажите адрес владельца и тикер или контракт.
-                </div>
-              )}
-
-              <p className="section-sub">
-                Демо: тикер <code>OLD</code> — отказ по возрасту; любой другой — успех.
-              </p>
 
               <button
                 type="button"
@@ -300,7 +355,7 @@ export function CreatePage() {
                 disabled={lookupStatus !== 'ok'}
                 onClick={() => setStep(2)}
               >
-                Далее: помощники
+                Дальше — помощники
               </button>
             </div>
           )}
@@ -308,16 +363,14 @@ export function CreatePage() {
           {step === 2 && (
             <div className="form-grid">
               <div className="note">
-                Здесь только те, кто <strong>помогает</strong> запускать токен. Доли
-                делят маркетинговый бюджет системы. Владелец в этот список не входит и
-                бюджет не видит.
+                Добавьте людей, которые помогали запускать токен. Между ними делите{' '}
+                <strong>100%</strong> вознаграждения. Владельца сюда не добавляйте.
               </div>
 
               <div className="stat">
-                <div className="stat-label">Владелец (без доли в бюджете)</div>
+                <div className="stat-label">Владелец (без доли)</div>
                 <div className="stat-value" style={{ fontSize: '1rem' }}>
-                  {ownerWallet.slice(0, 10)}…{ownerWallet.slice(-6)} ·{' '}
-                  {tokenMeta?.symbol}
+                  {shortAddr(ownerWallet)} · {tokenMeta?.symbol}
                 </div>
               </div>
 
@@ -328,6 +381,7 @@ export function CreatePage() {
                     <input
                       value={p.name}
                       onChange={(e) => updateHelper(i, { name: e.target.value })}
+                      placeholder="Как зовут"
                     />
                   </div>
                   <div className="field">
@@ -339,27 +393,28 @@ export function CreatePage() {
                       <option>Консультант</option>
                       <option>Маркетинг</option>
                       <option>Техподдержка</option>
-                      <option>Участник</option>
+                      <option>Другое</option>
                     </select>
                   </div>
                   <div className="field">
-                    <label>Wallet</label>
+                    <label>Кошелёк для выплат</label>
                     <input
                       value={p.wallet}
-                      onChange={(e) => updateHelper(i, { wallet: e.target.value })}
-                      placeholder="0x…"
+                      onChange={(e) => updateHelper(i, { wallet: e.target.value.trim() })}
+                      placeholder="Адрес кошелька"
                     />
                   </div>
                   <div className="field">
-                    <label>Доля %</label>
+                    <label>Доля, %</label>
                     <input
                       type="number"
                       min={0}
                       max={100}
-                      value={p.share}
+                      value={p.share || ''}
                       onChange={(e) =>
-                        updateHelper(i, { share: Number(e.target.value) })
+                        updateHelper(i, { share: Number(e.target.value) || 0 })
                       }
+                      placeholder="0"
                     />
                   </div>
                   <button
@@ -378,12 +433,11 @@ export function CreatePage() {
                 className="btn btn-ghost btn-sm"
                 onClick={() => setHelpers((prev) => [...prev, emptyHelper()])}
               >
-                + Добавить помощника
+                + Ещё помощник
               </button>
 
               <div className={`share-total ${totalShare === 100 ? 'ok' : 'bad'}`}>
-                Сумма долей помощников: {totalShare}%{' '}
-                {totalShare === 100 ? '✓' : '(нужно 100%)'}
+                Сейчас набрано: {totalShare}% из 100%
               </div>
 
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -393,10 +447,13 @@ export function CreatePage() {
                 <button
                   type="button"
                   className="btn btn-primary"
-                  disabled={totalShare !== 100 || helpers.some((h) => !h.wallet.trim())}
+                  disabled={
+                    totalShare !== 100 ||
+                    helpers.some((h) => !h.wallet.trim() || !h.name.trim())
+                  }
                   onClick={() => setStep(3)}
                 >
-                  Далее: подтверждение транзакциями
+                  Дальше — подтверждения
                 </button>
               </div>
             </div>
@@ -405,37 +462,42 @@ export function CreatePage() {
           {step === 3 && (
             <div className="form-grid">
               <div className="note">
-                Регистрация завершается только после ончейн-подтверждений: транзакция
-                от кошелька <strong>владельца</strong> и транзакции от{' '}
-                <strong>каждого долевого помощника</strong>. В демо можно «подписать»
-                без реального Web3.
+                Каждый участник отправляет небольшую подтверждающую транзакцию из своего
+                кошелька и вставляет сюда её номер (hash). Без этого регистрация не
+                завершится.
               </div>
 
               <div className="panel-flat">
                 <div className="inline-row" style={{ marginBottom: '0.75rem' }}>
-                  <span className={`live-dot${!ownerConfirmed ? '' : ''}`} />
-                  <strong>1. Подтверждение владельца</strong>
+                  <strong>Подтверждение владельца</strong>
                   {ownerConfirmed && (
-                    <span style={{ color: 'var(--accent)', fontWeight: 700 }}>✓</span>
+                    <span style={{ color: 'var(--accent)', fontWeight: 700 }}>Готово ✓</span>
                   )}
                 </div>
                 <p className="section-sub" style={{ marginBottom: '0.75rem' }}>
-                  Кошелёк {ownerWallet.slice(0, 12)}… должен отправить служебную
-                  транзакцию-подтверждение в систему.
+                  Кошелёк {shortAddr(ownerWallet)}
                 </p>
                 <div className="field">
-                  <label htmlFor="ownerTx">Tx hash (или сгенерировать демо)</label>
+                  <label htmlFor="ownerTx">Номер транзакции владельца</label>
                   <input
                     id="ownerTx"
                     value={ownerTx}
                     disabled={ownerConfirmed}
-                    onChange={(e) => setOwnerTx(e.target.value)}
-                    placeholder="0x… или оставьте пустым для демо"
+                    onChange={(e) => {
+                      setOwnerTx(e.target.value.trim())
+                      setOwnerConfirmed(false)
+                    }}
+                    placeholder="Вставьте hash транзакции"
                   />
                 </div>
                 {!ownerConfirmed && (
-                  <button type="button" className="btn btn-primary btn-sm" onClick={confirmOwner}>
-                    Подтвердить транзакцией владельца
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={!isTxHash(ownerTx)}
+                    onClick={confirmOwner}
+                  >
+                    Подтвердить
                   </button>
                 )}
                 {ownerConfirmed && (
@@ -445,13 +507,13 @@ export function CreatePage() {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    Смотреть в explorer →
+                    Открыть в обозревателе сети →
                   </a>
                 )}
               </div>
 
               <div className="panel-flat" style={{ display: 'grid', gap: '1rem' }}>
-                <strong>2. Подтверждения долевых участников</strong>
+                <strong>Подтверждения помощников</strong>
                 {helpers.map((h, i) => (
                   <div
                     key={h.wallet + i}
@@ -464,33 +526,39 @@ export function CreatePage() {
                   >
                     <div className="inline-row" style={{ marginBottom: '0.5rem' }}>
                       <strong>
-                        {h.name || 'Помощник'} · {h.role} · {h.share}%
+                        {h.name} · {h.role} · {h.share}%
                       </strong>
                       {h.confirmed && (
-                        <span style={{ color: 'var(--accent)', fontWeight: 700 }}>✓</span>
+                        <span style={{ color: 'var(--accent)', fontWeight: 700 }}>
+                          Готово ✓
+                        </span>
                       )}
                     </div>
                     <p className="section-sub" style={{ marginBottom: '0.5rem' }}>
-                      {h.wallet.slice(0, 12)}…
+                      {shortAddr(h.wallet)}
                     </p>
                     <div className="field">
-                      <label>Tx hash</label>
+                      <label>Номер транзакции</label>
                       <input
                         value={h.txHash}
                         disabled={h.confirmed}
                         onChange={(e) =>
-                          updateHelper(i, { txHash: e.target.value, confirmed: false })
+                          updateHelper(i, {
+                            txHash: e.target.value.trim(),
+                            confirmed: false,
+                          })
                         }
-                        placeholder="0x… или пусто для демо"
+                        placeholder="Вставьте hash транзакции"
                       />
                     </div>
                     {!h.confirmed ? (
                       <button
                         type="button"
                         className="btn btn-ghost btn-sm"
+                        disabled={!isTxHash(h.txHash)}
                         onClick={() => confirmHelper(i)}
                       >
-                        Подтвердить транзакцией
+                        Подтвердить
                       </button>
                     ) : (
                       <a
@@ -499,30 +567,11 @@ export function CreatePage() {
                         target="_blank"
                         rel="noreferrer"
                       >
-                        Explorer →
+                        Открыть в обозревателе →
                       </a>
                     )}
                   </div>
                 ))}
-              </div>
-
-              <div className="stats-grid">
-                <div className="stat">
-                  <div className="stat-label">Токен</div>
-                  <div className="stat-value">{tokenMeta?.symbol}</div>
-                </div>
-                <div className="stat">
-                  <div className="stat-label">Владелец</div>
-                  <div className="stat-value" style={{ fontSize: '1rem' }}>
-                    {ownerConfirmed ? 'подтверждён' : 'ожидает'}
-                  </div>
-                </div>
-                <div className="stat">
-                  <div className="stat-label">Помощники</div>
-                  <div className="stat-value" style={{ fontSize: '1rem' }}>
-                    {helpers.filter((h) => h.confirmed).length}/{helpers.length}
-                  </div>
-                </div>
               </div>
 
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -535,7 +584,7 @@ export function CreatePage() {
                   disabled={!canFinish}
                   onClick={finish}
                 >
-                  Зарегистрировать в системе
+                  Завершить регистрацию
                 </button>
                 {tokenMeta && (
                   <Link to={`/token/${tokenMeta.symbol}`} className="btn btn-ghost">

@@ -219,7 +219,7 @@ export const cabinetHistory = [
   { date: '17.09.2026', type: 'Начисление', project: 'BLOG', amount: '+420 DEL' },
   { date: '14.09.2026', type: 'Выплата', project: 'MUSIC', amount: '+180 DEL' },
   { date: '09.09.2026', type: 'Начисление', project: 'CREATOR', amount: '+310 DEL' },
-  { date: '01.09.2026', type: 'Делегирование', project: 'BLOG', amount: '+12.4K BLOG' },
+  { date: '01.09.2026', type: 'Вложение в сеть', project: 'BLOG', amount: '+12.4K BLOG' },
 ]
 
 export function formatCompact(n: number): string {

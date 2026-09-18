@@ -7,44 +7,37 @@ import {
   formatCompact,
   formatNumber,
   payoutsSeries,
-  registryTokens,
-  rewardHistory,
   tokensCreatedSeries,
   walletsSeries,
 } from '../data/mock'
+import { useStore } from '../lib/store'
 
 type AdminTab = 'overview' | 'params' | 'registry'
 
 export function AdminPage() {
+  const { registry, marketingPercent, rewardHistory, setMarketingPercent } = useStore()
   const [tab, setTab] = useState<AdminTab>('overview')
   const [query, setQuery] = useState('')
-  const [percent, setPercent] = useState(adminStats.marketingPercent)
-  const [draftPercent, setDraftPercent] = useState(adminStats.marketingPercent)
+  const [draftPercent, setDraftPercent] = useState(marketingPercent)
   const [showModal, setShowModal] = useState(false)
-  const [history, setHistory] = useState(rewardHistory)
   const [chart, setChart] = useState<'tokens' | 'delegation' | 'wallets' | 'payouts'>(
     'tokens',
   )
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return registryTokens
-    return registryTokens.filter(
+    if (!q) return registry
+    return registry.filter(
       (t) =>
         t.symbol.toLowerCase().includes(q) ||
         t.name.toLowerCase().includes(q) ||
+        t.ownerWallet.toLowerCase().includes(q) ||
         t.participants.some((p) => p.wallet.toLowerCase().includes(q)),
     )
-  }, [query])
+  }, [query, registry])
 
   const applyPercent = () => {
-    const today = new Date()
-    const date = today.toLocaleDateString('ru-RU')
-    setHistory((prev) => [
-      { date, from: percent, to: draftPercent, admin: 'Admin' },
-      ...prev,
-    ])
-    setPercent(draftPercent)
+    setMarketingPercent(draftPercent)
     setShowModal(false)
   }
 
@@ -58,7 +51,13 @@ export function AdminPage() {
           : payoutsSeries
 
   const chartUnit =
-    chart === 'delegation' ? 'M DEL' : chart === 'wallets' ? 'K' : chart === 'payouts' ? 'K DEL' : ''
+    chart === 'delegation'
+      ? ' млн DEL'
+      : chart === 'wallets'
+        ? ' тыс.'
+        : chart === 'payouts'
+          ? ' тыс. DEL'
+          : ''
 
   const chartColor =
     chart === 'tokens'
@@ -72,18 +71,18 @@ export function AdminPage() {
   return (
     <div className="page-shell">
       <div className="container">
-        <h1 className="page-title">DecimalChain Tokenization — Admin</h1>
+        <h1 className="page-title">Админка</h1>
         <p className="page-sub">
-          Полная экономика системы: метрики, динамика, процент вознаграждения и реестр
-          токенов.
+          Общая картина системы: сколько токенов, сколько выплат и какой процент
+          получают помощники.
         </p>
 
         <div className="tabs">
           {(
             [
               ['overview', 'Обзор'],
-              ['params', 'Параметры'],
-              ['registry', 'Реестр токенов'],
+              ['params', 'Процент выплат'],
+              ['registry', 'Все токены'],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -102,35 +101,35 @@ export function AdminPage() {
             <div className="stats-grid" style={{ marginBottom: '1.25rem' }}>
               <div className="stat">
                 <div className="stat-value">{formatNumber(adminStats.tokensCreated)}</div>
-                <div className="stat-label">Создано токенов</div>
+                <div className="stat-label">Токенов добавлено</div>
               </div>
               <div className="stat">
                 <div className="stat-value">{formatNumber(adminStats.tokensActive)}</div>
-                <div className="stat-label">Активных токенов</div>
+                <div className="stat-label">Сейчас активны</div>
               </div>
               <div className="stat">
                 <div className="stat-value">{formatNumber(adminStats.walletsTotal)}</div>
-                <div className="stat-label">Всего кошельков</div>
+                <div className="stat-label">Людей с кошельками</div>
               </div>
               <div className="stat">
                 <div className="stat-value">
                   {formatCompact(adminStats.delegatedVolume)}
                 </div>
-                <div className="stat-label">Объём делегирования</div>
+                <div className="stat-label">Вложено в сеть</div>
               </div>
               <div className="stat">
                 <div className="stat-value">{formatCompact(adminStats.unbondVolume)}</div>
-                <div className="stat-label">Объём анбонда</div>
+                <div className="stat-label">Выводят из сети</div>
               </div>
               <div className="stat">
                 <div className="stat-value">
                   {formatCompact(adminStats.paidConsultants)}
                 </div>
-                <div className="stat-label">Выплачено консультантам</div>
+                <div className="stat-label">Выплачено помощникам</div>
               </div>
               <div className="stat">
-                <div className="stat-value">{percent}%</div>
-                <div className="stat-label">Маркетинговый процент</div>
+                <div className="stat-value">{marketingPercent}%</div>
+                <div className="stat-label">Доля помощникам</div>
               </div>
             </div>
 
@@ -139,9 +138,9 @@ export function AdminPage() {
                 <div className="tabs">
                   {(
                     [
-                      ['tokens', 'Созданные токены'],
-                      ['delegation', 'Делегирование'],
-                      ['wallets', 'Кошельки'],
+                      ['tokens', 'Новые токены'],
+                      ['delegation', 'Вложения'],
+                      ['wallets', 'Люди'],
                       ['payouts', 'Выплаты'],
                     ] as const
                   ).map(([id, label]) => (
@@ -155,18 +154,14 @@ export function AdminPage() {
                     </button>
                   ))}
                 </div>
-                <h3 style={{ marginBottom: '0.75rem' }}>Динамика · 2026</h3>
+                <h3 style={{ marginBottom: '0.75rem' }}>Рост за 2026 год</h3>
                 <SimpleChart data={chartData} unit={chartUnit} color={chartColor} />
               </div>
 
               <div className="panel-flat" style={{ display: 'grid', gap: '0.85rem' }}>
-                <h3>Фокус руководства</h3>
-                <p className="section-sub">
-                  Админка — отдельный продукт: видно рост экосистемы, не только список
-                  токенов.
-                </p>
+                <h3>Коротко</h3>
                 <div className="stat">
-                  <div className="stat-label">Конверсия в активные</div>
+                  <div className="stat-label">Активных из всех</div>
                   <div className="stat-value">
                     {Math.round(
                       (adminStats.tokensActive / adminStats.tokensCreated) * 100,
@@ -175,21 +170,18 @@ export function AdminPage() {
                   </div>
                 </div>
                 <div className="stat">
-                  <div className="stat-label">Выплаты / делегирование</div>
-                  <div className="stat-value" style={{ fontSize: '1.35rem' }}>
-                    {(
-                      (adminStats.paidConsultants / adminStats.delegatedVolume) *
-                      100
-                    ).toFixed(2)}
-                    %
-                  </div>
+                  <div className="stat-label">В реестре сейчас</div>
+                  <div className="stat-value">{registry.length}</div>
                 </div>
                 <button
                   type="button"
                   className="btn btn-ghost"
-                  onClick={() => setTab('params')}
+                  onClick={() => {
+                    setDraftPercent(marketingPercent)
+                    setTab('params')
+                  }}
                 >
-                  Управление процентом
+                  Изменить процент выплат
                 </button>
               </div>
             </div>
@@ -199,14 +191,14 @@ export function AdminPage() {
         {tab === 'params' && (
           <div className="grid-2">
             <div className="panel">
-              <div className="section-kicker">Параметры системы</div>
-              <h2 style={{ marginBottom: '1rem' }}>Marketing Reward</h2>
+              <div className="section-kicker">Настройка</div>
+              <h2 style={{ marginBottom: '1rem' }}>Сколько получают помощники</h2>
               <div className="stat" style={{ marginBottom: '1rem' }}>
-                <div className="stat-value">{percent.toFixed(2)} %</div>
-                <div className="stat-label">Текущее значение</div>
+                <div className="stat-value">{marketingPercent.toFixed(2)} %</div>
+                <div className="stat-label">Сейчас</div>
               </div>
               <div className="field" style={{ marginBottom: '1rem' }}>
-                <label htmlFor="reward">Новый процент</label>
+                <label htmlFor="reward">Новое значение, %</label>
                 <input
                   id="reward"
                   type="number"
@@ -221,21 +213,21 @@ export function AdminPage() {
                 type="button"
                 className="btn btn-primary"
                 onClick={() => setShowModal(true)}
-                disabled={draftPercent === percent}
+                disabled={draftPercent === marketingPercent}
               >
-                Изменить процент
+                Сохранить
               </button>
               <p className="section-sub" style={{ marginTop: '1rem' }}>
-                Процент — параметр админки. На публичном сайте он не обещается как
-                фиксированная доходность.
+                Это внутренний параметр системы. На сайте мы не обещаем фиксированный
+                доход.
               </p>
             </div>
 
             <div>
               <div className="section-head">
                 <div>
-                  <div className="section-kicker">Аудит</div>
-                  <h2>История изменений</h2>
+                  <div className="section-kicker">Журнал</div>
+                  <h2>Кто менял процент</h2>
                 </div>
               </div>
               <div className="table-wrap">
@@ -245,11 +237,11 @@ export function AdminPage() {
                       <th>Дата</th>
                       <th>Было</th>
                       <th>Стало</th>
-                      <th>Администратор</th>
+                      <th>Кто</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {history.map((row) => (
+                    {rewardHistory.map((row) => (
                       <tr key={`${row.date}-${row.from}-${row.to}`}>
                         <td>{row.date}</td>
                         <td>{row.from}%</td>
@@ -270,24 +262,24 @@ export function AdminPage() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Поиск токена / проекта / wallet"
+                placeholder="Найти по токену, проекту или кошельку"
               />
             </div>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Token</th>
-                    <th>Project</th>
-                    <th>Wallets</th>
-                    <th>Delegated</th>
-                    <th>Unbonding</th>
-                    <th>Paid</th>
+                    <th>Токен</th>
+                    <th>Проект</th>
+                    <th>Людей</th>
+                    <th>Вложено</th>
+                    <th>Выводят</th>
+                    <th>Выплачено</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((t) => (
-                    <tr key={t.id} className="clickable">
+                    <tr key={t.id}>
                       <td>
                         <Link className="token-link" to={`/token/${t.symbol}`}>
                           {t.symbol}
@@ -303,9 +295,6 @@ export function AdminPage() {
                 </tbody>
               </table>
             </div>
-            <p className="section-sub" style={{ marginTop: '0.85rem' }}>
-              Нажмите на токен — откроется полная публичная аналитика.
-            </p>
           </>
         )}
       </div>
@@ -313,14 +302,16 @@ export function AdminPage() {
       {showModal && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="modal">
-            <h3>Подтверждение изменения</h3>
-            <p>Текущее значение: {percent}%</p>
-            <p>Новое значение: {draftPercent}%</p>
-            <p>
-              Изменение применяется к новым расчётам согласно правилам системы.
-            </p>
+            <h3>Подтвердите изменение</h3>
+            <p>Сейчас: {marketingPercent}%</p>
+            <p>Будет: {draftPercent}%</p>
+            <p>Новый процент начнёт действовать для следующих расчётов.</p>
             <div className="modal-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setShowModal(false)}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setShowModal(false)}
+              >
                 Отмена
               </button>
               <button type="button" className="btn btn-primary" onClick={applyPercent}>
