@@ -15,7 +15,10 @@ export function Layout({ children }: { children: ReactNode }) {
         <div className="container nav">
           <NavLink to="/" className="brand">
             <span className="brand-mark">D</span>
-            <span>Decimal Tokenization</span>
+            <span>Decimal</span>
+            <span style={{ color: 'var(--text-soft)', fontWeight: 560, fontSize: '0.92rem' }}>
+              Tokenization
+            </span>
           </NavLink>
           <nav className="nav-links" aria-label="Меню">
             {links.map((link) => (
@@ -39,8 +42,15 @@ export function Layout({ children }: { children: ReactNode }) {
       <main>{children}</main>
       <footer className="site-footer">
         <div className="container footer-row">
-          <span>DecimalChain Tokenization</span>
-          <span>Помощь проектам · вознаграждение помощникам</span>
+          <span>Decimal · Tokenization</span>
+          <a
+            href="https://decimalchain.com"
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            decimalchain.com
+          </a>
         </div>
       </footer>
     </>

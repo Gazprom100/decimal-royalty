@@ -56,30 +56,24 @@ export function TokenPage() {
             <div className="stat-label">Людей с токеном</div>
           </div>
           <div className="stat">
-            <div className="stat-value">
-              {formatNumber(token.delegated)} {token.symbol}
-            </div>
-            <div className="stat-label">Вложено в сеть</div>
+            <div className="stat-value">{formatCompact(token.delegated)}</div>
+            <div className="stat-label">Вложено · {token.symbol}</div>
           </div>
           <div className="stat">
-            <div className="stat-value">
-              {formatNumber(token.unbonding)} {token.symbol}
-            </div>
-            <div className="stat-label">Сейчас выводят</div>
+            <div className="stat-value">{formatCompact(token.unbonding)}</div>
+            <div className="stat-label">Сейчас выводят · {token.symbol}</div>
           </div>
           <div className="stat">
-            <div className="stat-value">
-              {formatNumber(token.activeDelegated)} {token.symbol}
-            </div>
-            <div className="stat-label">Активно вложено</div>
+            <div className="stat-value">{formatCompact(token.activeDelegated)}</div>
+            <div className="stat-label">Активно вложено · {token.symbol}</div>
           </div>
           <div className="stat">
-            <div className="stat-value">{formatNumber(token.paidDel)} DEL</div>
-            <div className="stat-label">Уже выплачено помощникам</div>
+            <div className="stat-value">{formatCompact(token.paidDel)}</div>
+            <div className="stat-label">Выплачено помощникам · DEL</div>
           </div>
           <div className="stat">
             <div className="stat-value">{marketingPercent}%</div>
-            <div className="stat-label">Доля системы помощникам</div>
+            <div className="stat-label">Доля помощникам</div>
           </div>
         </div>
 

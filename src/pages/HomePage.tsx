@@ -17,7 +17,7 @@ export function HomePage() {
       <section className="hero">
         <div className="container hero-grid">
           <div>
-            <div className="brand-hero">DecimalChain</div>
+            <div className="brand-hero">Decimal</div>
             <h1>Помогите проекту запустить токен — и получайте за это вознаграждение</h1>
             <p className="hero-lead">
               Блогеру, бизнесу или сообществу нужен свой токен. Вы помогаете его
