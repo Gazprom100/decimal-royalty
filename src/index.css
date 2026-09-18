@@ -244,12 +244,24 @@ p {
   font-weight: 800;
   letter-spacing: -0.05em;
   line-height: 0.95;
-  background: var(--grad);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: #ffffff;
   margin-bottom: 1.15rem;
   animation: rise-in 0.75s ease both;
+  text-shadow: 0 0 60px rgba(0, 232, 196, 0.35);
+  position: relative;
+  display: inline-block;
+}
+
+.brand-hero::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 12%;
+  bottom: 0.08em;
+  height: 0.12em;
+  border-radius: 999px;
+  background: var(--grad);
+  opacity: 0.9;
 }
 
 .hero h1 {
